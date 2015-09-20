@@ -1,25 +1,111 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+# Assignment 1 Report
+Author: Eric Fruelda
 
+## Introduction
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are part of the "quantified self" movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
 
-## Loading and preprocessing the data
+This assignment makes use of data from [Activity Monitoring Dataset](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip) which is data collected from personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
 
+## Analysis
+### Loading and preprocessing data
+To analyze the data, first, we need to load the data to R and add additional columns for the conversion of the "date" and "interval" columns into date and time format respectively. In order for this code to work, the file should be in the working directory.
+```{r loaddata, echo=TRUE}
+data <- read.csv(unz("activity.zip", "activity.csv"), header=TRUE)
+data$convdate <- as.POSIXct(data$date, format="%Y-%m-%d")
+data$convtime <- substr(as.POSIXct(sprintf("%04.0f", data$interval),
+                                   format="%H%M"), 12, 16)
+```
 
+### What is mean total number of steps taken per day?
+Using the aggregate function, a new data frame named "stepsdata" is derived from the original dataset to get the total steps for each day with the NAs removed. A histogram of the total number of steps taken each day is displayed. Then, the mean and median is computed from the "total_steps" column of that data frame.
+```{r calcsteps, echo=TRUE}
+stepsdata <- aggregate(data$steps, by=list(data$date), sum, na.rm = TRUE)
+colnames(stepsdata) <- c("date", "total_steps")
+hist(stepsdata$total_steps,
+     main = "Histogram of Total Number of Steps for Each Day",
+     xlab = "Total Number of Steps for Each Day",
+     col = "red")
+meansteps <- mean(stepsdata$total_steps)
+medsteps <- median(stepsdata$total_steps)
+sprintf("The mean and median of the total steps taken per day is %f and %f respectively.", meansteps, medsteps)
+```
 
-## What is mean total number of steps taken per day?
+### What is the average daily activity pattern?
+Using the aggregate function, a new data frame named "ave_stepsdata" is derived from the original dataset to get the average steps for each 5-minute interval across all days. A time series plot of the average steps for each 5-minute interval across all days is displayed.
+```{r avesteps, fig.width=10, echo=TRUE}
+ave_stepsdata <- aggregate(data$steps, by=list(data$convtime),
+                           mean, na.rm = TRUE)
+colnames(ave_stepsdata) <- c("time", "ave_steps")
+plot(as.factor(ave_stepsdata$time), ave_stepsdata$ave_steps,
+     main = "Time Series Plot of Average Steps Across All Days",
+     xlab = "Time (Minutes)",
+     ylab = "Average Number of Steps")
+lines(as.factor(ave_stepsdata$time), ave_stepsdata$ave_steps, col = "red")
+```
 
+The 5-minute interval which contains the maximum number of steps on average across all the days in the dataset is known using a combination of the  max and which functions.
+```{r maxsteps, echo=TRUE}
+max_steps <- max(ave_stepsdata$ave_steps)
+max_interval <- ave_stepsdata[which(ave_stepsdata$ave_steps == max_steps),
+                              "time"]
+sprintf("The 5-minute interval which contains the maximum number of steps on average across all the days in the dataset is the %s interval with %f steps.", max_interval, max_steps)
+```
 
+### Imputing missing values
+To know how many missing values there are in the dataset, is.na function is used.
+```{r nacount, echo=TRUE}
+baddata <- is.na(data)
+countna <- length(data[baddata])
+sprintf("There are %i NAs or missing values in the dataset.", countna)
+```
 
-## What is the average daily activity pattern?
+To replace the missing values in the dataset, we shall use the average steps taken across all days for each 5-minute interval. The new dataset with imputed NA values is called "datanew".
+```{r naimpute, echo=TRUE}
+datanew <- data
+for (i in 1:nrow(data)) {
+  if (is.na(data[i,"steps"])) {
+    get_interval <- data[i,"convtime"]
+    get_steps <- ave_stepsdata[which(ave_stepsdata$time == get_interval),
+                              "ave_steps"]
+    datanew[i,"steps"] <- get_steps }
+}
+```
 
+We can repeat the steps we did in the beginning to make a histogram. Using the aggregate function, a new data frame named "newstepsdata" is derived from the new dataset "datanew" to get the total steps for each day. A histogram of the total number of steps taken each day is displayed. Then, the mean and median is computed from the "total_steps" column of that data frame.
+```{r newcalcsteps, echo=TRUE}
+newstepsdata <- aggregate(datanew$steps, by=list(datanew$date), sum, na.rm=TRUE)
+colnames(newstepsdata) <- c("date", "total_steps")
+hist(newstepsdata$total_steps,
+     main = "Histogram of Total Number of Steps for Each Day",
+     xlab = "Total Number of Steps for Each Day",
+     col = "red")
+newmeansteps <- mean(newstepsdata$total_steps)
+newmedsteps <- median(newstepsdata$total_steps)
+sprintf("The mean and median of the total steps taken per day is %f and %f respectively.", newmeansteps, newmedsteps)
+```
 
+The value of mean and median has changed after imputing the NA values. Since we have imputed average values to the NAs or missing values, the mean and median are now the same.
 
-## Imputing missing values
+### Are there differences in activity patterns between weekdays and weekends?
+To know the differences in activity patterns between weekdays and weekends, we add a new column "day" to the new dataset "datanew" using weekdays function. The days are then converted to either of the two factors "weekday" or "weekend".
+```{r daydata, echo=TRUE}
+wkdays <- c("Monday","Tuesday","Wednesday","Thursday","Friday")
+datanew$day <- factor(weekdays(datanew$convdate) %in% wkdays,
+                      levels = c(TRUE, FALSE),
+                      labels = c("Weekday","Weekend"))
+```
 
-
-
-## Are there differences in activity patterns between weekdays and weekends?
+We can repeat the same steps that we did earlier using the aggregate function to create a new data frame named "ave_wdaystepsdata" from the new dataset to get the average steps for each 5-minute interval across all weekday days or weekend days. A time series plot of the average steps for each 5-minute interval across all weekday days or weekend days is displayed.
+```{r avewdaysteps, fig.width=10, echo=TRUE}
+ave_wdaysstepsdata <- aggregate(steps ~ convtime + day,
+                                data = datanew,
+                                mean)
+library(lattice)
+plotdiff <- xyplot(data = ave_wdaysstepsdata, steps ~ convtime + day,
+                   type = "l",
+       layout=c(1,2),
+       main = "Comparison of Activity on Weekdays and Weekends",
+       ylab="Average Number of Steps",
+       xlab="Time (Minutes)")
+print(plotdiff)
+```
